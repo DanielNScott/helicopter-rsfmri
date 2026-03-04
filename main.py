@@ -223,6 +223,19 @@ def main(analysis='all'):
     if analysis in ('all', 'network_pca'):
         run_analysis_pipeline(indep='CVPCA', exclusion_margin=0.05, forgetfulness_margin=0.05)
 
+    # Random forest classification: network aggregates LOOCV
+    if analysis in ('all', 'rf_network_agg'):
+        cvoptions = {
+            'n_workers': 1,
+            'algorithm': "random forest",
+            'do_backward_elim': False,
+            'stop_fold': None,
+            'null_ctrl': False,
+            'copy_ctrl': False,
+            'cvtypes': {'loocv': None}
+        }
+        run_analysis_pipeline(indep='Network Aggregates', exclusion_margin=0.05, forgetfulness_margin=0.05, cvoptions=cvoptions)
+
     # Continuous regression: predict IOWeight from network aggregates
     if analysis in ('all', 'ioweight_regression'):
         cvoptions = {

@@ -9,6 +9,7 @@ from multiprocessing import Pool
 import multiprocessing as mp
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
 
 def raw_data_pca(data, fmri_columns):
     # Get the fmri columns of the raw data matrix
@@ -105,6 +106,13 @@ class ModelWrapper:
             self.model = GaussianNB()
             self.model.fit(x_proc, y)
 
+        elif self.algorithm == "random forest":
+            self.model = RandomForestClassifier(n_estimators=500, random_state=1112)
+            self.model.fit(x_proc, y)
+
+            self.model.params = self.model.feature_importances_
+            self.model.pvalues = np.full(len(self.model.params), np.nan)
+
         else:
             raise ValueError(f"Unknown algorithm: {self.algorithm}")
 
@@ -120,7 +128,7 @@ class ModelWrapper:
         # Standard preprocessing shared between fit and predict
         X = self.preprocess(X)
 
-        if self.algorithm in ["regularized logistic regression", "naive bayes"]:
+        if self.algorithm in ["regularized logistic regression", "naive bayes", "random forest"]:
             preds = self.model.predict_proba(X)[:, 1]
         else:
             preds = self.model.predict(X)
