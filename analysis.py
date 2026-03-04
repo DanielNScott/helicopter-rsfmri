@@ -95,7 +95,7 @@ class ModelWrapper:
             self.model = sm.OLS(y, x_proc).fit(disp=0)  
 
         elif self.algorithm == "regularized logistic regression":
-            self.model = LogisticRegression(penalty="elasticnet", l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000)
+            self.model = LogisticRegression(l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000)
             self.model.fit(x_proc, y)
 
             self.model.params = self.model.coef_
@@ -381,7 +381,6 @@ def tune_log_reg_parameters(data, fmri_columns, outcome, subset_fraction=0.3, cv
     
     # Create model
     model = LogisticRegression(
-        penalty='elasticnet', 
         solver='saga', 
         random_state=1112,
         max_iter=1000
@@ -486,7 +485,7 @@ def fit_regularized_logistic_regression(X,Y):
     #X_scaled = pd.DataFrame(X_scaled, columns=X.columns.insert(0, 'const'))
     X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
 
-    model = LogisticRegression(penalty="elasticnet", l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000)
+    model = LogisticRegression(l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000)
     model.fit(X_scaled, Y)
 
 

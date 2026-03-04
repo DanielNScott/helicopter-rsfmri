@@ -137,32 +137,32 @@ def fit_prediction_models(X, Y, outcomes, selections=None, cvoptions=None, recov
 
     return fit_results, fit_metrics, auc_mean, auc_sem
 
-def main():
-    # Use the cross-validation AIC selected predictors?
-    use_selections = False
+def run_analysis_pipeline(indep=None, cvoptions=None, recovery_options=None, use_selections=False):
 
     # Cross validation options
-    cvoptions = {
-        'n_workers': 1,
-        'algorithm': "regularized logistic regression",
-        'do_backward_elim': False,
-        'stop_fold': None,
-        'null_ctrl': False,
-        'copy_ctrl': False,
-        'cvtypes': {'loocv':265, 'kfold':10}
-    }
+    if cvoptions is None:
+        cvoptions = {
+            'n_workers': 1,
+            'algorithm': "regularized logistic regression",
+            'do_backward_elim': False,
+            'stop_fold': None,
+            'null_ctrl': False,
+            'copy_ctrl': False,
+            'cvtypes': {'loocv':265, 'kfold':10}
+        }
 
     # Recovery options
-    recovery_options = {
-        'recovery_test': False,
-        'recovery_flip': 0.1
-    }
+    if recovery_options is None:
+        recovery_options = {
+            'recovery_test': False,
+            'recovery_flip': 0.1
+        }
 
     n_subj = 265
 
 
     # Prepare the data
-    X, Y, outcomes, selections = get_indep_and_dep_vars(use_selections=use_selections)
+    X, Y, outcomes, selections = get_indep_and_dep_vars(indep=indep, use_selections=use_selections)
 
     # Run the analysis
     fit_results, fit_metrics, auc_mean, auc_sem = fit_prediction_models(
@@ -184,6 +184,19 @@ def main():
     plt.savefig('fig5f.png', dpi=300)
 
 
+def main(analysis='all'):
+
+    # Figure 5a: raw correlation PCs, elastic net LOOCV
+    if analysis in ('all', 'raw_pca'):
+        run_analysis_pipeline(indep='Raw Correlation PCA')
+
+    # Figure 5b: network aggregate correlations, elastic net LOOCV
+    if analysis in ('all', 'network_agg'):
+        run_analysis_pipeline(indep='Network Aggregates')
+
+    # Figure 5c: consensus PCA of network aggregates, elastic net LOOCV
+    if analysis in ('all', 'network_pca'):
+        run_analysis_pipeline(indep='CVPCA')
 
 if __name__ == "__main__":
     main()
