@@ -326,8 +326,9 @@ def process_single_fold(args):
     # Training data and testing data
     x_train, y_train, x_test, y_test = X[train_mask].copy(), Y[train_mask].copy(), X[test_mask].copy(), Y[test_mask].copy()
 
-    # Resample the training data to balance class membership
-    x_train, y_train = get_balanced_resample(x_train, y_train)
+    # Resample the training data to balance class membership (classification only)
+    if algorithm not in ['linear regression']:
+        x_train, y_train = get_balanced_resample(x_train, y_train)
 
     # Train and test the model using consolidated function
     model = ModelWrapper(algorithm=algorithm, backward_elim=do_backward_elim)
@@ -421,6 +422,23 @@ def get_aucs(fit_results):
         aucs[group] = np.stack(aucs[group])
 
     return aucs
+
+
+def get_loocv_regression_stats(fit_results):
+    """Compute R-squared, correlation, and p-value from LOOCV predictions."""
+    from scipy.stats import pearsonr
+    test_preds = np.concatenate(fit_results['test_preds'])
+    test_targs = np.concatenate(fit_results['test_targs'])
+
+    # Correlation and p-value
+    r, p = pearsonr(test_preds, test_targs)
+
+    # R-squared (proportion of variance explained by CV predictions)
+    ss_res = np.sum((test_targs - test_preds) ** 2)
+    ss_tot = np.sum((test_targs - np.mean(test_targs)) ** 2)
+    r_squared = 1 - ss_res / ss_tot
+
+    return {'r': r, 'r_squared': r_squared, 'p': p}
 
 
 def get_balanced_resample(X, Y, remove=False):

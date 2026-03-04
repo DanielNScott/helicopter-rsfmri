@@ -6,6 +6,11 @@ from scipy.linalg import orthogonal_procrustes
 from scipy.stats import pearsonr
 from scipy.stats import gaussian_kde
 import matplotlib. pyplot as plt
+import pickle
+
+from networks import *
+from paths import *
+from dataio import load_and_merge_raw_data
 
 from networks import get_functional_networks
 
@@ -363,10 +368,7 @@ def plot_kdes(snrs):
     # Plot average participant score SNRs
     plt.figure(figsize=(10, 5))
 
-if __name__ == "__main__":
-    from networks import *
-    from paths import *
-    from dataio import load_and_merge_raw_data
+def run_cvpca_analysis():
 
     check_assignments = False
     recompute = False
@@ -401,3 +403,7 @@ if __name__ == "__main__":
     X = pd.DataFrame(X, columns=[f'PC{i+1}' for i in range(X.shape[1])])
 
     X.to_csv("./data/functional_network_pc_scores.csv", index=False)
+
+
+if __name__ == "__main__":
+    run_cvpca_analysis()

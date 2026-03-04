@@ -106,14 +106,39 @@ def plot_loocvs_from_results_only(fit_results, outcomes):
     plt.figure(figsize=(4,4))
 
     if 'loocv' in fit_results.keys():
-        text_offsets, text_colors = [5,0,-5], [corder[0], corder[1], corder[2]]
         text_offsets = [0.4, 0.2, 0.0]
+        text_colors = [corder[0], corder[1], corder[2]]
         for i, var in enumerate(outcomes):
             y_test = fit_results['loocv'][var]["test_targs"]
             y_pred = fit_results['loocv'][var]["test_preds"]
             plot_LOOCV_AUCs(y_pred, y_test, text=True, text_offset=text_offsets[i], text_color=text_colors[i], newfig=False, label=var)
         plt.legend()
         plt.tight_layout()
+
+
+def plot_loocv_regression(fit_results, outcomes):
+    """Plot LOOCV predicted vs actual for continuous outcomes."""
+    from analysis import get_loocv_regression_stats
+
+    plt.figure(figsize=(4 * len(outcomes), 4))
+    for i, var in enumerate(outcomes):
+        test_preds = np.concatenate(fit_results['loocv'][var]['test_preds'])
+        test_targs = np.concatenate(fit_results['loocv'][var]['test_targs'])
+        stats = get_loocv_regression_stats(fit_results['loocv'][var])
+
+        plt.subplot(1, len(outcomes), i + 1)
+        plt.scatter(test_targs, test_preds, alpha=0.3, s=10)
+        xlim = plt.xlim()
+        plt.plot(xlim, xlim, 'k--', alpha=0.5)
+        plt.xlim(xlim)
+        plt.xlabel('Actual')
+        plt.ylabel('Predicted (LOO)')
+        plt.title(var)
+        plt.text(0.05, 0.95, f"r = {stats['r']:.3f}\nR² = {stats['r_squared']:.3f}\np = {stats['p']:.3f}",
+            transform=plt.gca().transAxes, va='top')
+        plt.grid(alpha=0.3)
+
+    plt.tight_layout()
 
 
 def plot_regression_stability(outcomes, use_selections, selections, flatcorrcols, coeffs_avg, coeffs_std):
