@@ -82,7 +82,7 @@ class ModelWrapper:
         x_proc = self.preprocess(x)
 
         # Save the list of variables that end up in the model, excluding the constant
-        self.variables = x_proc.columns.tolist()[1:]
+        self.variables = x_proc.columns.tolist()[1:] if self.add_constant else x_proc.columns.tolist()
 
         # Create the model instance
         if self.algorithm == "pclr":
@@ -98,8 +98,8 @@ class ModelWrapper:
             self.model = LogisticRegression(l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000)
             self.model.fit(x_proc, y)
 
-            self.model.params = self.model.coef_
-            self.model.pvalues = np.array([np.nan] * len(self.model.params))  # p-values not available for sklearn models
+            self.model.params = self.model.coef_.ravel()
+            self.model.pvalues = np.full(len(self.model.params), np.nan)
 
         elif self.algorithm == "naive bayes":
             self.model = GaussianNB()
@@ -109,7 +109,7 @@ class ModelWrapper:
             raise ValueError(f"Unknown algorithm: {self.algorithm}")
 
         # Get p-values of everything except constant
-        self.p_values = list(self.model.pvalues[1:])
+        self.p_values = list(self.model.pvalues[1:]) if self.add_constant else list(self.model.pvalues)
 
     def predict(self, X):
         """Apply model to the input data to generate predictions."""
@@ -247,14 +247,14 @@ def cross_validation(X, Y, n_folds=10, null_ctrl=False, copy_ctrl=False, n_worke
     n_samples = X.shape[0]
     fold_indices = (np.arange(n_samples) % n_folds)
     
-    # Shuffle fold inds if not LOOCV (otherwise, convenient to have in order)
-    if n_folds == n_samples:
+    # Shuffle fold assignments for k-fold (for LOOCV, each fold is one subject)
+    if n_folds < n_samples:
         np.random.shuffle(fold_indices)
 
     # If checking null control, replace data with random noise
     if null_ctrl:
-        X[:] = np.random.randn(X.shape[0], X.shape[1])
-        Y[:] = np.random.randint(2, size=Y.shape[0])
+        X = pd.DataFrame(np.random.randn(X.shape[0], X.shape[1]), columns=X.columns, index=X.index)
+        Y = pd.Series(np.random.randint(2, size=Y.shape[0]), index=Y.index, name=Y.name)
 
     # Prepare arguments for each fold
     fold_args = []
@@ -543,31 +543,35 @@ def aggregate_selection_and_aic_data(predictors, fit_results, cvtype):
     return selection_counts, aic_means, aic_stds
 
 
-def generate_recovery_data(X,Y, recovery_flip):
-    # Number of subjects
+def generate_recovery_data(X, Y, recovery_flip):
+    """Generate synthetic binary outcomes from fitted model predictions."""
     n_subj = X.shape[0]
 
     # Generate recovery data using the fit model
     _, _, y_hat, _ = fit_logistic_regression(X, Y)
-    Y = (y_hat > np.median(y_hat)).astype(int)
+    Y_new = (y_hat > np.median(y_hat)).astype(int)
 
-    # Flip a few outcomes or LR will break
-    flip_indices = np.random.choice(n_subj, size=int(n_subj*recovery_flip), replace=False)
-    Y[flip_indices] = 0.5 - (Y[flip_indices]-0.5)
-    Y.reset_index(drop=True, inplace=True)
+    # Flip a fraction of outcomes to prevent perfect separation
+    flip_indices = np.random.choice(n_subj, size=int(n_subj * recovery_flip), replace=False)
+    Y_new[flip_indices] = 1 - Y_new[flip_indices]
+    Y_new = Y_new.reset_index(drop=True)
+
+    return Y_new
 
 def extract_regression_results(fit_results, outcomes):
     coeffs, pvalues, coeffs_avg, coeffs_std, pvalues_avg, pvalues_std = {}, {}, {}, {}, {}, {}
     for var in outcomes:
-        coeffs[var]  = pd.concat(fit_results['loocv'][var]['params'],axis=1)
-        pvalues[var] = pd.concat(fit_results['loocv'][var]['pvalues'],axis=1)
+        coeffs[var]  = pd.concat(fit_results['loocv'][var]['params'], axis=1)
+        pvalues[var] = pd.concat(fit_results['loocv'][var]['pvalues'], axis=1)
 
-        # Average coefficients:
+        # Average coefficients
         coeffs_avg[var] = coeffs[var].mean(axis=1)
         coeffs_std[var] = coeffs[var].std(axis=1)
 
         pvalues_avg[var] = pvalues[var].mean(axis=1)
         pvalues_std[var] = pvalues[var].std(axis=1)
+
+    return coeffs_avg, coeffs_std, pvalues_avg, pvalues_std
 
 
 def extract_predictions(fit_results, n_subj, n_folds):
