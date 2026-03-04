@@ -9,7 +9,7 @@ import glob
 from pathlib import Path
 
 
-def load_data(fmri_data_path, behavioral_data_path):
+def load_and_merge_raw_data(fmri_data_path, behavioral_data_path):
     # Load pre-processed data
     result = pyreadr.read_r(fmri_data_path)
     fmri_data = result[None]  # Adjust key if necessary
@@ -21,10 +21,10 @@ def load_data(fmri_data_path, behavioral_data_path):
     behavioral_data.rename(columns={'Subject': 'id'}, inplace=True)
 
     # Get columns to include in PCA
-    fmri_columns = [col for col in fmri_data.columns if col.startswith('V')]
+    fmri_colnames = [col for col in fmri_data.columns if col.startswith('V')]
 
     # Subset fmri_data to only imaging and ID data
-    fmri_data = fmri_data[['id'] + fmri_columns]
+    fmri_data = fmri_data[['id'] + fmri_colnames]
 
     # Merge fmri_data and behavioral_data on 'id'
     data = pd.merge(fmri_data, behavioral_data, on='id', how='inner')
@@ -32,7 +32,7 @@ def load_data(fmri_data_path, behavioral_data_path):
     # Column for checking that RWLike is CPLike + IOLike
     # data['JointLike'] = data['CPLike'] + data['IOLike']
 
-    return data, fmri_columns
+    return data, fmri_colnames
 
 def save_workspace(filename="workspace.pkl"):
     """Saves all picklable global variables to a file."""

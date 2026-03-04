@@ -366,12 +366,12 @@ def plot_kdes(snrs):
 if __name__ == "__main__":
     from networks import *
     from paths import *
-    from dataio import load_data
+    from dataio import load_and_merge_raw_data
 
     check_assignments = False
     recompute = False
 
-    data = load_data(fmri_data_path, behavioral_data_path)
+    data = load_and_merge_raw_data(fmri_data_path, behavioral_data_path)
     X, flatcorrcols = get_functional_networks(data, power_csv_file, networks_to_inspect, check_assignments, short_names, recompute=recompute)
 
     # Perform consensus PCA
