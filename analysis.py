@@ -32,8 +32,9 @@ def raw_data_pca(data, fmri_columns):
     return X
 
 class ModelWrapper:
-    def __init__(self, algorithm, backward_elim=False):
+    def __init__(self, algorithm, backward_elim=False, balance_method='resample'):
         self.algorithm = algorithm
+        self.balance_method = balance_method
         self.scaler = StandardScaler()
         self.p_values = None
         self.variables = None
@@ -96,7 +97,8 @@ class ModelWrapper:
             self.model = sm.OLS(y, x_proc).fit(disp=0)  
 
         elif self.algorithm == "regularized logistic regression":
-            self.model = LogisticRegression(l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000)
+            cw = 'balanced' if self.balance_method == 'class_weight' else None
+            self.model = LogisticRegression(l1_ratio=0.5, solver="saga", C=1, random_state=1112, max_iter=1000, class_weight=cw)
             self.model.fit(x_proc, y)
 
             self.model.params = self.model.coef_.ravel()
@@ -107,7 +109,8 @@ class ModelWrapper:
             self.model.fit(x_proc, y)
 
         elif self.algorithm == "random forest":
-            self.model = RandomForestClassifier(n_estimators=500, random_state=1112)
+            cw = 'balanced' if self.balance_method == 'class_weight' else None
+            self.model = RandomForestClassifier(n_estimators=500, random_state=1112, class_weight=cw)
             self.model.fit(x_proc, y)
 
             self.model.params = self.model.feature_importances_
@@ -244,7 +247,7 @@ class ModelWrapper:
 
 
 
-def cross_validation(X, Y, n_folds=10, null_ctrl=False, copy_ctrl=False, n_workers=18, algorithm='pclr', do_backward_elim=True, stop_fold=None):
+def cross_validation(X, Y, n_folds=10, null_ctrl=False, copy_ctrl=False, n_workers=18, algorithm='pclr', do_backward_elim=True, stop_fold=None, balance_method='resample'):
     '''Perform cross-validation with parallel processing across folds.'''
     np.random.seed(1112)
 
@@ -269,7 +272,7 @@ def cross_validation(X, Y, n_folds=10, null_ctrl=False, copy_ctrl=False, n_worke
     for fold in range(n_folds):
 
         # Set up the arguments for this fold
-        fold_args.append((X, Y, n_folds, fold_indices, fold, copy_ctrl, algorithm, do_backward_elim))
+        fold_args.append((X, Y, n_folds, fold_indices, fold, copy_ctrl, algorithm, do_backward_elim, balance_method))
 
         # Early stopping for debugging
         if stop_fold and (fold == stop_fold): break
@@ -317,7 +320,7 @@ def cross_validation(X, Y, n_folds=10, null_ctrl=False, copy_ctrl=False, n_worke
 
 def process_single_fold(args):
     """Process a single fold - designed to be called by worker processes."""
-    X, Y, n_folds, fold_indices, fold, copy_ctrl, algorithm, do_backward_elim = args
+    X, Y, n_folds, fold_indices, fold, copy_ctrl, algorithm, do_backward_elim, balance_method = args
 
     # Create training and testing masks
     if n_folds > 1:
@@ -335,11 +338,11 @@ def process_single_fold(args):
     x_train, y_train, x_test, y_test = X[train_mask].copy(), Y[train_mask].copy(), X[test_mask].copy(), Y[test_mask].copy()
 
     # Resample the training data to balance class membership (classification only)
-    if algorithm not in ['linear regression']:
+    if algorithm not in ['linear regression'] and balance_method == 'resample':
         x_train, y_train = get_balanced_resample(x_train, y_train)
 
     # Train and test the model using consolidated function
-    model = ModelWrapper(algorithm=algorithm, backward_elim=do_backward_elim)
+    model = ModelWrapper(algorithm=algorithm, backward_elim=do_backward_elim, balance_method=balance_method)
     model.fit(x_train, y_train)
 
     aic_impacts = model.aic_impact

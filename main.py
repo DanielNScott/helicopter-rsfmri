@@ -141,13 +141,14 @@ def fit_prediction_models(X, Y, outcomes, selections=None, cvoptions=None, recov
             print(f"Running cross-validated fitting for {var} using {cvtype}")
             fit_results[cvtype][var] = cross_validation(
                 X_selected, Yvar,
-                n_folds = n_folds, 
-                null_ctrl = cvoptions['null_ctrl'], 
-                copy_ctrl = cvoptions['copy_ctrl'], 
-                algorithm = cvoptions['algorithm'], 
-                n_workers = cvoptions['n_workers'], 
+                n_folds = n_folds,
+                null_ctrl = cvoptions['null_ctrl'],
+                copy_ctrl = cvoptions['copy_ctrl'],
+                algorithm = cvoptions['algorithm'],
+                n_workers = cvoptions['n_workers'],
                 do_backward_elim = cvoptions['do_backward_elim'],
-                stop_fold = cvoptions['stop_fold']
+                stop_fold = cvoptions['stop_fold'],
+                balance_method = cvoptions.get('balance_method', 'resample')
             )
 
             if cvtype == 'kfold':
@@ -160,7 +161,7 @@ def fit_prediction_models(X, Y, outcomes, selections=None, cvoptions=None, recov
 
     return fit_results, fit_metrics, auc_mean, auc_sem
 
-def run_analysis_pipeline(indep=None, outcomes=None, cvoptions=None, recovery_options=None, use_selections=False, snr_threshold=0.68, exclusion_margin=None, forgetfulness_margin=None):
+def run_analysis_pipeline(indep=None, outcomes=None, cvoptions=None, recovery_options=None, use_selections=False, snr_threshold=0.68, exclusion_margin=None, forgetfulness_margin=None, save_name=None):
 
     # Prepare the data
     X, Y, outcomes, selections = get_indep_and_dep_vars(snr_threshold=snr_threshold, indep=indep, outcomes=outcomes, use_selections=use_selections, exclusion_margin=exclusion_margin, forgetfulness_margin=forgetfulness_margin)
@@ -202,6 +203,13 @@ def run_analysis_pipeline(indep=None, outcomes=None, cvoptions=None, recovery_op
     if use_selections and not cvoptions['do_backward_elim']:
         load_and_plot_selection_analysis(n_subj)
 
+    # Save results if requested
+    if save_name is not None:
+        import pickle
+        with open(f"./data/{save_name}.pkl", "wb") as f:
+            pickle.dump({'fit_results': fit_results, 'outcomes': outcomes}, f)
+        print(f"Saved results to ./data/{save_name}.pkl")
+
     # Plot the results of our analyses
     if cvoptions['algorithm'] == 'linear regression':
         plot_loocv_regression(fit_results, outcomes)
@@ -211,17 +219,17 @@ def run_analysis_pipeline(indep=None, outcomes=None, cvoptions=None, recovery_op
 
 def main(analysis='all'):
 
-    # Figure 5a: raw correlation PCs, elastic net LOOCV
+    # Figure 5g: raw correlation PCs, elastic net LOOCV
     if analysis in ('all', 'raw_pca'):
-        run_analysis_pipeline(indep='Raw Correlation PCA', exclusion_margin=0.05, forgetfulness_margin=0.05)
+        run_analysis_pipeline(indep='Raw Correlation PCA', exclusion_margin=0.05, forgetfulness_margin=0.05, save_name='fig5_raw_pca')
 
-    # Figure 5b: network aggregate correlations, elastic net LOOCV
+    # Figure 5h: network aggregate correlations, elastic net LOOCV
     if analysis in ('all', 'network_agg'):
-        run_analysis_pipeline(indep='Network Aggregates', exclusion_margin=0.05, forgetfulness_margin=0.05)
+        run_analysis_pipeline(indep='Network Aggregates', exclusion_margin=0.05, forgetfulness_margin=0.05, save_name='fig5_network_agg')
 
-    # Figure 5c: consensus PCA of network aggregates, elastic net LOOCV
+    # Figure 5i: consensus PCA of network aggregates, elastic net LOOCV
     if analysis in ('all', 'network_pca'):
-        run_analysis_pipeline(indep='CVPCA', exclusion_margin=0.05, forgetfulness_margin=0.05)
+        run_analysis_pipeline(indep='CVPCA', exclusion_margin=0.05, forgetfulness_margin=0.05, save_name='fig5_consensus_pca')
 
     # Random forest classification: network aggregates LOOCV
     if analysis in ('all', 'rf_network_agg'):
@@ -232,9 +240,10 @@ def main(analysis='all'):
             'stop_fold': None,
             'null_ctrl': False,
             'copy_ctrl': False,
+            'balance_method': 'class_weight',
             'cvtypes': {'loocv': None}
         }
-        run_analysis_pipeline(indep='Network Aggregates', exclusion_margin=0.05, forgetfulness_margin=0.05, cvoptions=cvoptions)
+        run_analysis_pipeline(indep='CVPCA', exclusion_margin=0.05, forgetfulness_margin=0.05, cvoptions=cvoptions)
 
     # Continuous regression: predict IOWeight from network aggregates
     if analysis in ('all', 'ioweight_regression'):
