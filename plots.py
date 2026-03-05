@@ -4,6 +4,184 @@ import scipy as sp
 from matplotlib import pyplot as plt
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 
+def plot_mean_correlation_matrix(correlation_matrices, network_labels=None, network_boundaries=None, figsize=(8, 7)):
+    """Plot across-participant mean ROI x ROI correlation matrix.
+
+    correlation_matrices: (n_subj, 264, 264) array
+    network_labels: list of (position, name) tuples for network tick marks
+    network_boundaries: list of ROI indices where networks change
+    """
+    mean_corr = np.mean(correlation_matrices, axis=0)
+
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    im = ax.imshow(mean_corr, cmap='RdBu_r', vmin=-0.3, vmax=0.7, aspect='auto')
+    plt.colorbar(im, ax=ax, label='Mean Fisher Z correlation', shrink=0.8)
+
+    # Draw network boundaries
+    if network_boundaries is not None:
+        for b in network_boundaries:
+            ax.axhline(b - 0.5, color='k', linewidth=0.5, alpha=0.5)
+            ax.axvline(b - 0.5, color='k', linewidth=0.5, alpha=0.5)
+
+    # Label networks
+    if network_labels is not None:
+        positions = [pos for pos, _ in network_labels]
+        names = [name for _, name in network_labels]
+        ax.set_xticks(positions)
+        ax.set_xticklabels(names, rotation=45, ha='right')
+        ax.set_yticks(positions)
+        ax.set_yticklabels(names)
+    else:
+        ax.set_xlabel('ROI')
+        ax.set_ylabel('ROI')
+
+    ax.set_title('Mean ROI x ROI Functional Connectivity')
+    plt.tight_layout()
+    return fig
+
+
+def plot_pca_components_matrix(consensus_pcs, network_labels=None, n_components=9, figsize=(10, 8)):
+    """Plot PCA component loadings reshaped as network x network matrices.
+
+    consensus_pcs: (n_components, 28) array of PC loadings over network pairs
+    network_labels: list of 7 short network names
+    """
+    if network_labels is None:
+        network_labels = ['DMN', 'CO', 'VA', 'Vis', 'FPN', 'Sal', 'DAN']
+
+    n_nets = len(network_labels)
+    n_cols = min(3, n_components)
+    n_rows = int(np.ceil(n_components / n_cols))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    axes = np.atleast_2d(axes)
+
+    for i in range(n_components):
+        ax = axes[i // n_cols, i % n_cols]
+
+        # Reconstruct symmetric matrix from upper triangle
+        mat = np.zeros((n_nets, n_nets))
+        idx = 0
+        for r in range(n_nets):
+            for c in range(r, n_nets):
+                mat[r, c] = consensus_pcs[i, idx]
+                mat[c, r] = consensus_pcs[i, idx]
+                idx += 1
+
+        vmax = np.max(np.abs(mat))
+        im = ax.imshow(mat, cmap='RdBu_r', vmin=-vmax, vmax=vmax, aspect='auto')
+        ax.set_xticks(range(n_nets))
+        ax.set_xticklabels(network_labels, rotation=45, ha='right')
+        ax.set_yticks(range(n_nets))
+        ax.set_yticklabels(network_labels)
+        ax.set_title(f'PC {i + 1}')
+        plt.colorbar(im, ax=ax, shrink=0.7)
+
+    # Hide unused axes
+    for i in range(n_components, n_rows * n_cols):
+        axes[i // n_cols, i % n_cols].set_visible(False)
+
+    plt.suptitle('Consensus PCA Component Loadings (Network x Network)')
+    plt.tight_layout()
+    return fig
+
+
+def plot_network_aggregated_matrix(flat_corrs, network_labels=None, ax=None, figsize=None):
+    """Plot mean network-aggregated correlation matrix (7x7).
+
+    flat_corrs: (n_subj, 28) array of network-pair correlations
+    network_labels: list of 7 short network names
+    """
+    if network_labels is None:
+        network_labels = ['DMN', 'CO', 'VA', 'Vis', 'FPN', 'Sal', 'DAN']
+
+    n_nets = len(network_labels)
+    mean_vals = np.mean(flat_corrs, axis=0)
+
+    # Reconstruct symmetric matrix from upper triangle
+    mat = np.zeros((n_nets, n_nets))
+    idx = 0
+    for r in range(n_nets):
+        for c in range(r, n_nets):
+            mat[r, c] = mean_vals[idx]
+            mat[c, r] = mean_vals[idx]
+            idx += 1
+
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    else:
+        fig = ax.figure
+
+    im = ax.imshow(mat, cmap='RdBu_r', vmin=-0.05, vmax=0.2, aspect='auto')
+    plt.colorbar(im, ax=ax, shrink=0.8)
+
+    ax.set_xticks(range(n_nets))
+    ax.set_xticklabels(network_labels, rotation=45, ha='right')
+    ax.set_yticks(range(n_nets))
+    ax.set_yticklabels(network_labels)
+    ax.set_title('Mean Network Connectivity')
+    return fig
+
+
+def plot_pc_loadings_points(consensus_pcs, consensus_ve, ci_lower, ci_upper, feature_names, n_components=4, ax=None, figsize=(6, 4)):
+    """Plot PC loadings as points with error bars, dim if CI overlaps zero.
+
+    consensus_pcs: (n_pcs, 28) array
+    consensus_ve: (n_pcs,) variance explained
+    ci_lower, ci_upper: (n_pcs, 28) arrays of 95% CI bounds
+    feature_names: list of 28 network-pair names
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    else:
+        fig = ax.figure
+
+    n_features = len(feature_names)
+    x = np.arange(n_features)
+    spacing = 0.8 / n_components
+
+    for i in range(n_components):
+        offset = (i - n_components / 2 + 0.5) * spacing
+        ve_pct = consensus_ve[i] * 100
+        y = consensus_pcs[i]
+        lo = ci_lower[i]
+        hi = ci_upper[i]
+        yerr_lo = y - lo
+        yerr_hi = hi - y
+
+        # Determine which loadings have CIs overlapping zero
+        overlaps_zero = (lo <= 0) & (hi >= 0)
+
+        # Plot non-overlapping points at full opacity
+        color = f'C{i}'
+        mask = ~overlaps_zero
+        if np.any(mask):
+            ax.errorbar(
+                x[mask] + offset, y[mask],
+                yerr=[yerr_lo[mask], yerr_hi[mask]],
+                fmt='o', color=color, markersize=4, capsize=2,
+                label=f'PC{i+1} ({ve_pct:.0f}%)', alpha=1.0,
+            )
+
+        # Plot zero-overlapping points dimmed
+        mask = overlaps_zero
+        if np.any(mask):
+            ax.errorbar(
+                x[mask] + offset, y[mask],
+                yerr=[yerr_lo[mask], yerr_hi[mask]],
+                fmt='o', color=color, markersize=4, capsize=2,
+                alpha=0.3,
+            )
+
+    ax.axhline(0, color='k', linewidth=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(feature_names, rotation=90)
+    ax.set_ylabel('Loading')
+    ax.set_title('Consensus PC Loadings')
+    ax.legend(loc='upper right')
+    return fig
+
+
 def plot_iolike_by_forgetfulness(data):
     plt.plot(data['forgetfulness'], data['IOLike']+np.random.randn(265)*0.05,'o')
     plt.xlabel('Forgetfulness')
